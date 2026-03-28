@@ -115,6 +115,75 @@ app.get('/vibration/latest', async (req, res) => {
   }
 });
 
+// --------------------
+// MAGNETOMETER SENSOR ENDPOINTS
+// --------------------
+// POST /magnetometer
+// Body: { deviceId: string, value: number }
+app.post('/magnetometer', async (req, res) => {
+  try {
+    const { deviceId, value } = req.body || {};
+    if (!deviceId || value === undefined) return res.status(400).json({ error: 'deviceId and value are required' });
+
+    const sql = 'INSERT INTO magnetometers (device_id, value) VALUES (?, ?)';
+    await pool.query(sql, [deviceId, value]);
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('Error inserting magnetometer data', err.message || err);
+    return res.status(500).json({ error: 'Failed to save magnetometer data' });
+  }
+});
+
+// GET /magnetometer?limit=10 - returns latest readings (newest first)
+app.get('/magnetometer', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit || '10', 10);
+    const sql = 'SELECT id, device_id as deviceId, value, ts as timestamp FROM magnetometers ORDER BY id DESC LIMIT ?';
+    const [rows] = await pool.query(sql, [limit]);
+    return res.json(rows);
+  } catch (err) {
+    console.error('Error fetching magnetometer data', err.message || err);
+    return res.status(500).json({ error: 'Failed to fetch magnetometer data' });
+  }
+});
+
+// GET /magnetometer/latest - convenience endpoint for last 10
+app.get('/magnetometer/latest', async (req, res) => {
+  try {
+    const sql = 'SELECT id, device_id as deviceId, value, ts as timestamp FROM magnetometers ORDER BY id DESC LIMIT 10';
+    const [rows] = await pool.query(sql);
+    return res.json(rows);
+  } catch (err) {
+    console.error('Error fetching latest magnetometer data', err.message || err);
+    return res.status(500).json({ error: 'Failed to fetch latest magnetometer data' });
+  }
+});
+
+// GET /magnetometer/stats?deviceId=ESP32-001 - statistics for a device
+app.get('/magnetometer/stats', async (req, res) => {
+  try {
+    const { deviceId } = req.query;
+    if (!deviceId) return res.status(400).json({ error: 'deviceId is required' });
+
+    const sql = `
+      SELECT 
+        COUNT(*) as total,
+        AVG(value) as average,
+        MIN(value) as minimum,
+        MAX(value) as maximum,
+        STDDEV(value) as stdDev
+      FROM magnetometers 
+      WHERE device_id = ?
+    `;
+    const [rows] = await pool.query(sql, [deviceId]);
+    return res.json(rows[0] || {});
+  } catch (err) {
+    console.error('Error fetching magnetometer stats', err.message || err);
+    return res.status(500).json({ error: 'Failed to fetch magnetometer stats' });
+  }
+});
+
 
 // Chama antes de iniciar o servidor
 await initDatabase();
